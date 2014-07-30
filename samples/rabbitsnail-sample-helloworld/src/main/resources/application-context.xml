@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="
+                http://www.springframework.org/schema/beans
+                http://www.springframework.org/schema/beans/spring-beans.xsd"
+	default-autowire="byName">
+	<bean class="org.springframework.orm.jpa.support.PersistenceAnnotationBeanPostProcessor" />
+	<bean id="entityManagerFactory"
+		class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<property name="persistenceUnitName" value="default" />
+		<property name="jpaPropertyMap">
+			<map>
+				<entry key="hbase.zookeeper.quorum" value="192.168.20.200,192.168.20.201,192.168.20.202" />
+			</map>
+		</property>
+	</bean>
+	<bean id="userRepository" class="cn.paxos.rabbitsnail.sample.helloworld.repository.UserRepository" />
+</beans>
