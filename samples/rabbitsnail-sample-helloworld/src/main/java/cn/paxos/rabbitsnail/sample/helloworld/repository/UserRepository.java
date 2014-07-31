@@ -13,6 +13,10 @@ public class UserRepository {
 		entityManager.persist(user);
 	}
 
+	public void mergeUser(User user) {
+		entityManager.merge(user);
+	}
+
 	public User loadUserById(byte[] id) {
 		return entityManager.find(User.class, id);
 	}

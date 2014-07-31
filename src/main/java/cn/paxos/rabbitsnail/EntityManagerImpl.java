@@ -29,56 +29,24 @@ public class EntityManagerImpl implements EntityManager {
 	@Override
 	public void persist(final Object entity) {
 		final Entity entityDefinition = entities.byType(entity.getClass());
-		final byte[] id = entityDefinition.getId(entity);
-		final Put put = new Put(id);
-		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
-			@Override
-			public void onColumn(Column column, Object value) {
-				if (column == entityDefinition.getIdColumn()) {
-					return;
-				}
-				if (value == null) {
-					return;
-				}
-				final byte[] columnValueAsBytes;
-				if (value instanceof String) {
-					columnValueAsBytes = Bytes.toBytes((String) value);
-				} else if (value instanceof Integer) {
-					columnValueAsBytes = Bytes.toBytes((Integer) value);
-				} else if (value instanceof Long) {
-					columnValueAsBytes = Bytes.toBytes((Long) value);
-				} else if (value instanceof Boolean) {
-					columnValueAsBytes = Bytes.toBytes((Boolean) value);
-				} else if (value instanceof BigDecimal) {
-					columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
-				} else if (value instanceof Date) {
-					columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
-				} else {
-					throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
-				}
-				put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
-			}
-		});
-		put.add(
-				Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
-				Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
-				Bytes.toBytes(1));
-		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
-			hTable.checkAndPut(
-					id,
-					Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
-					Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
-					null,
-					put);
-		} catch (Exception e) {
-			throw new RuntimeException("Error on persisting " + entity.getClass(), e);
-		}
+		this.put(entityDefinition, entity, null);
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public <T> T merge(T entity) {
-		// TODO Auto-generated method stub
-		return null;
+		final Entity entityDefinition = entities.byType(entity.getClass());
+		Object id = entityDefinition.getIdColumn().get(entity);
+		while (true) {
+			Object latestEntity = this.find(entity.getClass(), id);
+			int oldVersion = (Integer) entityDefinition.getVersionColumn().get(latestEntity);
+			boolean saved = this.put(entityDefinition, entity, oldVersion);
+			if (saved) {
+				return (T) this.find(entity.getClass(), id);
+			} else {
+				try { Thread.sleep(100); } catch (InterruptedException e) {}
+			}
+		}
 	}
 
 	@Override
@@ -224,6 +192,53 @@ public class EntityManagerImpl implements EntityManager {
 	@Override
 	public EntityTransaction getTransaction() {
 		throw new UnsupportedOperationException();
+	}
+	
+	private boolean put(final Entity entityDefinition, final Object entity, Integer oldVersion) {
+		final byte[] id = entityDefinition.getId(entity);
+		final Put put = new Put(id);
+		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
+			@Override
+			public void onColumn(Column column, Object value) {
+				if (column == entityDefinition.getIdColumn()) {
+					return;
+				}
+				if (value == null) {
+					return;
+				}
+				final byte[] columnValueAsBytes;
+				if (value instanceof String) {
+					columnValueAsBytes = Bytes.toBytes((String) value);
+				} else if (value instanceof Integer) {
+					columnValueAsBytes = Bytes.toBytes((Integer) value);
+				} else if (value instanceof Long) {
+					columnValueAsBytes = Bytes.toBytes((Long) value);
+				} else if (value instanceof Boolean) {
+					columnValueAsBytes = Bytes.toBytes((Boolean) value);
+				} else if (value instanceof BigDecimal) {
+					columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
+				} else if (value instanceof Date) {
+					columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
+				} else {
+					throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
+				}
+				put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
+			}
+		});
+		put.add(
+				Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+				Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+				Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
+		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
+			return hTable.checkAndPut(
+					id,
+					Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+					Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+					oldVersion == null ? null : Bytes.toBytes(oldVersion),
+					put);
+		} catch (Exception e) {
+			throw new RuntimeException("Error on saving " + entity.getClass(), e);
+		}
 	}
 
 }

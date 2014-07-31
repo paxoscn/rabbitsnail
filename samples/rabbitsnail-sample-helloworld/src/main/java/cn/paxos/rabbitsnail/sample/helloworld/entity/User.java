@@ -5,11 +5,8 @@ import javax.persistence.Id;
 import javax.persistence.Version;
 
 import cn.paxos.rabbitsnail.ColumnFamily;
-import cn.paxos.rabbitsnail.ExistenceFlag;
-import cn.paxos.rabbitsnail.matcher.NullMatcher;
 
 @Entity
-@ExistenceFlag(family = "info", column = "name", matcher = NullMatcher.class)
 public class User {
 
 	private byte[] id;

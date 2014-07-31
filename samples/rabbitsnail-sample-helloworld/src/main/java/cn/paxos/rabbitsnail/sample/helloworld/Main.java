@@ -1,6 +1,5 @@
 package cn.paxos.rabbitsnail.sample.helloworld;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
@@ -20,7 +19,11 @@ public class Main {
 		user.setName("Tom");
 		userRepository.persistUser(user);
 		user = userRepository.loadUserById(id);
-		System.out.println("Loaded User#" + Bytes.toHex(user.getId()) + ": " + user.getName());
+		System.out.println("Loaded User: " + user.getName() + " (version = " + user.getVersion() + ")");
+		user.setName("Jerry");
+		userRepository.mergeUser(user);
+		user = userRepository.loadUserById(id);
+		System.out.println("Loaded User: " + user.getName() + " (version = " + user.getVersion() + ")");
 	}
 
 }
