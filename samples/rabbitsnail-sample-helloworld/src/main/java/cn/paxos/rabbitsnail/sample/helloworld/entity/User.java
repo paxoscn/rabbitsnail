@@ -2,6 +2,7 @@ package cn.paxos.rabbitsnail.sample.helloworld.entity;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;
+import javax.persistence.Version;
 
 import cn.paxos.rabbitsnail.ColumnFamily;
 import cn.paxos.rabbitsnail.ExistenceFlag;
@@ -13,6 +14,7 @@ public class User {
 
 	private byte[] id;
 	private String name;
+	private int version;
 	
 	@Id
 	public byte[] getId() {
@@ -27,6 +29,14 @@ public class User {
 	}
 	public void setName(String name) {
 		this.name = name;
+	}
+	@Version
+	@ColumnFamily(name = "info")
+	public int getVersion() {
+		return version;
+	}
+	public void setVersion(int version) {
+		this.version = version;
 	}
 
 }

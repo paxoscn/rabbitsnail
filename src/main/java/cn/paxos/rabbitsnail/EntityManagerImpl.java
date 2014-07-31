@@ -1,17 +1,13 @@
 package cn.paxos.rabbitsnail;
 
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.Date;
 
-import javax.persistence.Column;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityTransaction;
 import javax.persistence.FlushModeType;
-import javax.persistence.Id;
 import javax.persistence.LockModeType;
 import javax.persistence.Query;
-import javax.persistence.Table;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Get;
@@ -23,88 +19,56 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class EntityManagerImpl implements EntityManager {
 
 	private final Configuration conf;
+	private final Entities entities;
 
-	public EntityManagerImpl(Configuration conf) {
+	public EntityManagerImpl(Configuration conf, Entities entities) {
 		this.conf = conf;
+		this.entities = entities;
 	}
 
 	@Override
-	public void persist(Object entity) {
-		final String tableName = this.extractTableName(entity.getClass());
-		
-		Method idGetter = null;
-		outter:
-		for (Method method : entity.getClass().getMethods()) {
-			if (method.isAnnotationPresent(Id.class)) {
-				try {
-					idGetter = method;
-					break outter;
-				} catch (Exception e) {
-					throw new RuntimeException("Error on finding id of " + entity.getClass(), e);
+	public void persist(final Object entity) {
+		final Entity entityDefinition = entities.byType(entity.getClass());
+		final byte[] id = entityDefinition.getId(entity);
+		final Put put = new Put(id);
+		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
+			@Override
+			public void onColumn(Column column, Object value) {
+				if (column == entityDefinition.getIdColumn()) {
+					return;
 				}
+				if (value == null) {
+					return;
+				}
+				final byte[] columnValueAsBytes;
+				if (value instanceof String) {
+					columnValueAsBytes = Bytes.toBytes((String) value);
+				} else if (value instanceof Integer) {
+					columnValueAsBytes = Bytes.toBytes((Integer) value);
+				} else if (value instanceof Long) {
+					columnValueAsBytes = Bytes.toBytes((Long) value);
+				} else if (value instanceof Boolean) {
+					columnValueAsBytes = Bytes.toBytes((Boolean) value);
+				} else if (value instanceof BigDecimal) {
+					columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
+				} else if (value instanceof Date) {
+					columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
+				} else {
+					throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
+				}
+				put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
 			}
-		}
-		if (idGetter == null) {
-			throw new RuntimeException("There is no id for " + entity.getClass());
-		}
-		
-		final byte[] id;
-		try {
-			id = (byte[]) idGetter.invoke(entity);
-		} catch (Exception e) {
-			throw new RuntimeException("Error on fetching id of " + entity.getClass() + " by " + idGetter, e);
-		}
-
-		Put put = new Put(id);
-		for (Method method : entity.getClass().getMethods()) {
-			if (method.equals(idGetter)
-					|| method.getName().equals("getClass")
-					|| !method.getName().startsWith("get")
-					|| method.getParameterTypes().length > 0) {
-				continue;
-			}
-			
-			ColumnFamily columnFamily = method.getAnnotation(ColumnFamily.class);
-			String columnFamilyName = columnFamily.name();
-
-			final String columnName = this.extractColumnName(method);
-			
-			final Object columnValue;
-			try {
-				columnValue = method.invoke(entity);
-			} catch (Exception e) {
-				throw new RuntimeException("Error on fetching column of " + entity.getClass() + " by " + method, e);
-			}
-			if (columnValue == null) {
-				continue;
-			}
-			final byte[] columnValueAsBytes;
-			if (columnValue instanceof String) {
-				columnValueAsBytes = Bytes.toBytes((String) columnValue);
-			} else if (columnValue instanceof Integer) {
-				columnValueAsBytes = Bytes.toBytes((Integer) columnValue);
-			} else if (columnValue instanceof Long) {
-				columnValueAsBytes = Bytes.toBytes((Long) columnValue);
-			} else if (columnValue instanceof Boolean) {
-				columnValueAsBytes = Bytes.toBytes((Boolean) columnValue);
-			} else if (columnValue instanceof BigDecimal) {
-				columnValueAsBytes = Bytes.toBytes((BigDecimal) columnValue);
-			} else if (columnValue instanceof Date) {
-				columnValueAsBytes = Bytes.toBytes((int) ((Date) columnValue).getTime());
-			} else {
-				throw new RuntimeException("Unknown column value type: " + columnValue + " from " + entity.getClass() + "." + method);
-			}
-			
-			put.add(Bytes.toBytes(columnFamilyName), Bytes.toBytes(columnName), columnValueAsBytes);
-		}
-
-		ExistenceFlag existenceFlag = entity.getClass().getAnnotation(ExistenceFlag.class);
-		try (HTable hTable = new HTable(conf, tableName)) {
+		});
+		put.add(
+				Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+				Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+				Bytes.toBytes(1));
+		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
 			hTable.checkAndPut(
 					id,
-					Bytes.toBytes(existenceFlag.family()),
-					Bytes.toBytes(existenceFlag.column()),
-					existenceFlag.matcher().newInstance().getExpectedValue(),
+					Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+					Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+					null,
 					put);
 		} catch (Exception e) {
 			throw new RuntimeException("Error on persisting " + entity.getClass(), e);
@@ -125,63 +89,50 @@ public class EntityManagerImpl implements EntityManager {
 	@SuppressWarnings("unchecked")
 	@Override
 	public <T> T find(Class<T> entityClass, Object primaryKey) {
-		final String tableName = this.extractTableName(entityClass);
-		
+		final Entity entityDefinition = entities.byType(entityClass);
 		Get get = new Get((byte[]) primaryKey);
+		final String tableName = entityDefinition.getTableName();
 		final Result result;
 		try (HTable hTable = new HTable(conf, tableName)) {
 			result = hTable.get(get);
 			if (result.isEmpty()) {
 				return null;
 			}
-			
-			Object entity = entityClass.newInstance();
-
-			for (Method method : entityClass.getMethods()) {
-				if (method.getName().equals("getClass")
-						|| !method.getName().startsWith("get")
-						|| method.getParameterTypes().length > 0) {
-					continue;
-				}
-
-				final Class<?> fieldType = method.getReturnType();
-				
-				Method setter = entityClass.getMethod("set" + method.getName().substring(3), fieldType);
-				
-				if (method.isAnnotationPresent(Id.class)) {
-					setter.invoke(entity, result.getRow());
-				} else {
-					ColumnFamily columnFamily = method.getAnnotation(ColumnFamily.class);
-					String columnFamilyName = columnFamily.name();
-
-					final String columnName = this.extractColumnName(method);
-
-					final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(columnFamilyName), Bytes.toBytes(columnName));
-					if (columnValueAsBytes == null) {
-						continue;
-					}
-					
-					final Object fieldValue;
-					if (String.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toString(columnValueAsBytes);
-					} else if (Integer.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toInt(columnValueAsBytes);
-					} else if (Long.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toLong(columnValueAsBytes);
-					} else if (Boolean.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toBoolean(columnValueAsBytes);
-					} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
-					} else if (Date.class.isAssignableFrom(fieldType)) {
-						fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
+			final Object entity = entityClass.newInstance();
+			entityDefinition.iterateColumns(entity, false, new ColumnIteratingCallback() {
+				@Override
+				public void onColumn(Column column, Object value) {
+					if (column == entityDefinition.getIdColumn()) {
+						column.set(entity, result.getRow());
 					} else {
-						throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + method);
+						final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
+						if (columnValueAsBytes == null) {
+							return;
+						}
+						Class<?> fieldType = column.getType();
+						final Object fieldValue;
+						if (String.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toString(columnValueAsBytes);
+						} else if (Integer.class.isAssignableFrom(fieldType)
+								|| int.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toInt(columnValueAsBytes);
+						} else if (Long.class.isAssignableFrom(fieldType)
+								|| long.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toLong(columnValueAsBytes);
+						} else if (Boolean.class.isAssignableFrom(fieldType)
+								|| boolean.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toBoolean(columnValueAsBytes);
+						} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
+						} else if (Date.class.isAssignableFrom(fieldType)) {
+							fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
+						} else {
+							throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
+						}
+						column.set(entity, fieldValue);
 					}
-
-					setter.invoke(entity, fieldValue);
 				}
-			}
-			
+			});
 			return (T) entity;
 		} catch (Exception e) {
 			throw new RuntimeException("Error on fetching " + entityClass + "#" + Bytes.toHex((byte[]) primaryKey), e);
@@ -273,28 +224,6 @@ public class EntityManagerImpl implements EntityManager {
 	@Override
 	public EntityTransaction getTransaction() {
 		throw new UnsupportedOperationException();
-	}
-	
-	private String extractTableName(Class<?> entityClass) {
-		final String tableName;
-		Table table = entityClass.getAnnotation(Table.class);
-		if (table == null) {
-			tableName = entityClass.getSimpleName().toLowerCase();
-		} else {
-			tableName = table.name();
-		}
-		return tableName;
-	}
-
-	private String extractColumnName(Method method) {
-		final String columnName;
-		Column column = method.getAnnotation(Column.class);
-		if (column == null) {
-			columnName = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
-		} else {
-			columnName = column.name();
-		}
-		return columnName;
 	}
 
 }
