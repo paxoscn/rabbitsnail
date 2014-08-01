@@ -10,14 +10,18 @@ import javax.persistence.Table;
 import javax.persistence.Transient;
 import javax.persistence.Version;
 
+import org.apache.hadoop.hbase.util.Bytes;
+
 public class Entity {
 
+	private final Class<?> entityType;
 	private final String tableName;
 	private final Map<String, Column> columns;
 	private final Column idColumn;
 	private final Column versionColumn;
 
 	public Entity(Class<?> entityType) {
+		this.entityType = entityType;
 		columns = new HashMap<>();
 		if (!entityType.isAnnotationPresent(javax.persistence.Entity.class)) {
 			throw new RuntimeException("There is no @Entity annotation on " + entityType);
@@ -89,6 +93,14 @@ public class Entity {
 		}
 		idColumn = idColumn_;
 		versionColumn = versionColumn_;
+	}
+
+	public Object newInstance() {
+		try {
+			return entityType.newInstance();
+		} catch (Exception e) {
+			throw new RuntimeException("Error on initializing " + entityType, e);
+		}
 	}
 
 	public byte[] getId(Object entity) {

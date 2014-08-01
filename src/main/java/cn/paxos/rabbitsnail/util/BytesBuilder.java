@@ -9,6 +9,11 @@ public class BytesBuilder {
 	
 	private final List<byte[]> byteArrayList = new LinkedList<>();
 	
+	public BytesBuilder add(byte[] added) {
+		byteArrayList.add(added);
+		return this;
+	}
+	
 	public BytesBuilder add(String added) {
 		byteArrayList.add(Bytes.toBytes(added));
 		return this;

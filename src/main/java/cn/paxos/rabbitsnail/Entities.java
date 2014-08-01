@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.client.OperationWithAttributes;
-
 public class Entities {
 	
 	private final Map<Class<?>, Entity> entityMap = new HashMap<>();
@@ -28,6 +26,16 @@ public class Entities {
 			throw new RuntimeException("Unmapped class: " + entityType);
 		}
 		return entity;
+	}
+
+	public Entity byName(String entityTypeName) {
+		for (Class<?> entityType : entityMap.keySet()) {
+			if (entityType.getName().equals(entityTypeName)
+					|| entityType.getSimpleName().equals(entityTypeName)) {
+				return entityMap.get(entityType);
+			}
+		}
+		throw new RuntimeException("Unmapped class: " + entityTypeName);
 	}
 
 }

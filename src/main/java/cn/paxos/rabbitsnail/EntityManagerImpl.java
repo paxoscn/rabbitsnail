@@ -10,6 +10,7 @@ import javax.persistence.LockModeType;
 import javax.persistence.Query;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
@@ -29,18 +30,19 @@ public class EntityManagerImpl implements EntityManager {
 	@Override
 	public void persist(final Object entity) {
 		final Entity entityDefinition = entities.byType(entity.getClass());
-		this.put(entityDefinition, entity, null);
+		byte[] id = entityDefinition.getId(entity);
+		this.put(entityDefinition, entity, id, null);
 	}
 
 	@SuppressWarnings("unchecked")
 	@Override
 	public <T> T merge(T entity) {
 		final Entity entityDefinition = entities.byType(entity.getClass());
-		Object id = entityDefinition.getIdColumn().get(entity);
+		byte[] id = entityDefinition.getId(entity);
 		while (true) {
 			Object latestEntity = this.find(entity.getClass(), id);
 			int oldVersion = (Integer) entityDefinition.getVersionColumn().get(latestEntity);
-			boolean saved = this.put(entityDefinition, entity, oldVersion);
+			boolean saved = this.put(entityDefinition, entity, id, oldVersion);
 			if (saved) {
 				return (T) this.find(entity.getClass(), id);
 			} else {
@@ -51,7 +53,14 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public void remove(Object entity) {
-		throw new UnsupportedOperationException();
+		final Entity entityDefinition = entities.byType(entity.getClass());
+		byte[] id = entityDefinition.getId(entity);
+		Delete delete = new Delete(id);
+		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
+			hTable.delete(delete);
+		} catch (Exception e) {
+			throw new RuntimeException("Error on deleting " + entity.getClass(), e);
+		}
 	}
 
 	@SuppressWarnings("unchecked")
@@ -66,41 +75,7 @@ public class EntityManagerImpl implements EntityManager {
 			if (result.isEmpty()) {
 				return null;
 			}
-			final Object entity = entityClass.newInstance();
-			entityDefinition.iterateColumns(entity, false, new ColumnIteratingCallback() {
-				@Override
-				public void onColumn(Column column, Object value) {
-					if (column == entityDefinition.getIdColumn()) {
-						column.set(entity, result.getRow());
-					} else {
-						final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
-						if (columnValueAsBytes == null) {
-							return;
-						}
-						Class<?> fieldType = column.getType();
-						final Object fieldValue;
-						if (String.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toString(columnValueAsBytes);
-						} else if (Integer.class.isAssignableFrom(fieldType)
-								|| int.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toInt(columnValueAsBytes);
-						} else if (Long.class.isAssignableFrom(fieldType)
-								|| long.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toLong(columnValueAsBytes);
-						} else if (Boolean.class.isAssignableFrom(fieldType)
-								|| boolean.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toBoolean(columnValueAsBytes);
-						} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
-						} else if (Date.class.isAssignableFrom(fieldType)) {
-							fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
-						} else {
-							throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
-						}
-						column.set(entity, fieldValue);
-					}
-				}
-			});
+			final Object entity = this.readEntityFromResult(entityDefinition, result);
 			return (T) entity;
 		} catch (Exception e) {
 			throw new RuntimeException("Error on fetching " + entityClass + "#" + Bytes.toHex((byte[]) primaryKey), e);
@@ -147,7 +122,7 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public Query createQuery(String qlString) {
-		throw new UnsupportedOperationException();
+		return new QueryImpl(this, qlString);
 	}
 
 	@Override
@@ -193,9 +168,55 @@ public class EntityManagerImpl implements EntityManager {
 	public EntityTransaction getTransaction() {
 		throw new UnsupportedOperationException();
 	}
+
+	Object readEntityFromResult(final Entity entityDefinition, final Result result) {
+		final Object entity = entityDefinition.newInstance();
+		entityDefinition.iterateColumns(entity, false, new ColumnIteratingCallback() {
+			@Override
+			public void onColumn(Column column, Object value) {
+				if (column == entityDefinition.getIdColumn()) {
+					column.set(entity, result.getRow());
+				} else {
+					final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
+					if (columnValueAsBytes == null) {
+						return;
+					}
+					Class<?> fieldType = column.getType();
+					final Object fieldValue;
+					if (String.class.isAssignableFrom(fieldType)) {
+						fieldValue = Bytes.toString(columnValueAsBytes);
+					} else if (Integer.class.isAssignableFrom(fieldType)
+							|| int.class.isAssignableFrom(fieldType)) {
+						fieldValue = Bytes.toInt(columnValueAsBytes);
+					} else if (Long.class.isAssignableFrom(fieldType)
+							|| long.class.isAssignableFrom(fieldType)) {
+						fieldValue = Bytes.toLong(columnValueAsBytes);
+					} else if (Boolean.class.isAssignableFrom(fieldType)
+							|| boolean.class.isAssignableFrom(fieldType)) {
+						fieldValue = Bytes.toBoolean(columnValueAsBytes);
+					} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
+						fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
+					} else if (Date.class.isAssignableFrom(fieldType)) {
+						fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
+					} else {
+						throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
+					}
+					column.set(entity, fieldValue);
+				}
+			}
+		});
+		return entity;
+	}
 	
-	private boolean put(final Entity entityDefinition, final Object entity, Integer oldVersion) {
-		final byte[] id = entityDefinition.getId(entity);
+	Configuration getConf() {
+		return conf;
+	}
+
+	Entities getEntities() {
+		return entities;
+	}
+
+	private boolean put(final Entity entityDefinition, final Object entity, byte[] id, Integer oldVersion) {
 		final Put put = new Put(id);
 		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
 			@Override
