@@ -1,4 +1,4 @@
 rabbitsnail
 ===========
 
-An JPA entity manager for HBase
+A JPA entity manager for HBase
