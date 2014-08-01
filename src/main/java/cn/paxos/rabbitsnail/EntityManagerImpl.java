@@ -1,7 +1,14 @@
 package cn.paxos.rabbitsnail;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityTransaction;
@@ -172,36 +179,93 @@ public class EntityManagerImpl implements EntityManager {
 	Object readEntityFromResult(final Entity entityDefinition, final Result result) {
 		final Object entity = entityDefinition.newInstance();
 		entityDefinition.iterateColumns(entity, false, new ColumnIteratingCallback() {
+			@SuppressWarnings("unchecked")
 			@Override
 			public void onColumn(Column column, Object value) {
 				if (column == entityDefinition.getIdColumn()) {
 					column.set(entity, result.getRow());
 				} else {
-					final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
-					if (columnValueAsBytes == null) {
-						return;
-					}
-					Class<?> fieldType = column.getType();
-					final Object fieldValue;
-					if (String.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toString(columnValueAsBytes);
-					} else if (Integer.class.isAssignableFrom(fieldType)
-							|| int.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toInt(columnValueAsBytes);
-					} else if (Long.class.isAssignableFrom(fieldType)
-							|| long.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toLong(columnValueAsBytes);
-					} else if (Boolean.class.isAssignableFrom(fieldType)
-							|| boolean.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toBoolean(columnValueAsBytes);
-					} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
-						fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
-					} else if (Date.class.isAssignableFrom(fieldType)) {
-						fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
+					if (column.getAppended() == null) {
+						final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
+						if (columnValueAsBytes == null) {
+							return;
+						}
+						Class<?> fieldType = column.getType();
+						final Object fieldValue;
+						if (String.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toString(columnValueAsBytes);
+						} else if (Integer.class.isAssignableFrom(fieldType)
+								|| int.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toInt(columnValueAsBytes);
+						} else if (Long.class.isAssignableFrom(fieldType)
+								|| long.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toLong(columnValueAsBytes);
+						} else if (Boolean.class.isAssignableFrom(fieldType)
+								|| boolean.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toBoolean(columnValueAsBytes);
+						} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
+							fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
+						} else if (Date.class.isAssignableFrom(fieldType)) {
+							fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
+						} else {
+							throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
+						}
+						column.set(entity, fieldValue);
 					} else {
-						throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
+						@SuppressWarnings("rawtypes")
+						List list = (List) column.get(entity);
+						Appended appended = column.getAppended();
+						int itemIndex = 0;
+						while (result.containsColumn(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(itemIndex))) {
+							final Object item = appended.newInstance();
+							list.add(item);
+							String itemValue = Bytes.toString(result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(itemIndex)));
+							StringTokenizer st = new StringTokenizer(itemValue, "|");
+							final Map<String, String> attributeMap = new HashMap<>();
+							while (st.hasMoreTokens()) {
+								String keyAndValue = st.nextToken();
+								String[] keyAndValueArray = keyAndValue.split("=");
+								String attributeKey = keyAndValueArray[0];
+								try {
+									String attributeValue = URLDecoder.decode(keyAndValueArray[1], "UTF-8");
+									attributeMap.put(attributeKey, attributeValue);
+								} catch (UnsupportedEncodingException e) {
+									throw new RuntimeException("Unknown error on encoding string: " + keyAndValueArray[1], e);
+								}
+							}
+							appended.iterateColumns(item, false, new ColumnIteratingCallback() {
+								@Override
+								public void onColumn(Column column, Object value) {
+									String readValueAsString = attributeMap.get(column.getColumn());
+									if (readValueAsString == null) {
+										return;
+									}
+									final Object readValue;
+									Class<?> fieldType = column.getType();
+									if (String.class.isAssignableFrom(fieldType)) {
+										readValue = readValueAsString;
+									} else if (Integer.class.isAssignableFrom(fieldType)
+											|| int.class.isAssignableFrom(fieldType)) {
+										readValue = Integer.parseInt(readValueAsString);
+									} else if (Long.class.isAssignableFrom(fieldType)
+											|| long.class.isAssignableFrom(fieldType)) {
+										readValue = Long.parseLong(readValueAsString);
+									} else if (Boolean.class.isAssignableFrom(fieldType)
+											|| boolean.class.isAssignableFrom(fieldType)) {
+										readValue = Boolean.parseBoolean(readValueAsString);
+									} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
+										readValue = new BigDecimal(readValueAsString);
+									} else if (Date.class.isAssignableFrom(fieldType)) {
+										readValue = new Date(Long.parseLong(readValueAsString));
+									} else {
+										throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + item.getClass() + "." + column.getField().getName());
+									}
+									column.set(item, readValue);
+								}
+							});
+							itemIndex++;
+						}
 					}
-					column.set(entity, fieldValue);
 				}
 			}
 		});
@@ -219,6 +283,7 @@ public class EntityManagerImpl implements EntityManager {
 	private boolean put(final Entity entityDefinition, final Object entity, byte[] id, Integer oldVersion) {
 		final Put put = new Put(id);
 		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
+			@SuppressWarnings("rawtypes")
 			@Override
 			public void onColumn(Column column, Object value) {
 				if (column == entityDefinition.getIdColumn()) {
@@ -227,23 +292,58 @@ public class EntityManagerImpl implements EntityManager {
 				if (value == null) {
 					return;
 				}
-				final byte[] columnValueAsBytes;
-				if (value instanceof String) {
-					columnValueAsBytes = Bytes.toBytes((String) value);
-				} else if (value instanceof Integer) {
-					columnValueAsBytes = Bytes.toBytes((Integer) value);
-				} else if (value instanceof Long) {
-					columnValueAsBytes = Bytes.toBytes((Long) value);
-				} else if (value instanceof Boolean) {
-					columnValueAsBytes = Bytes.toBytes((Boolean) value);
-				} else if (value instanceof BigDecimal) {
-					columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
-				} else if (value instanceof Date) {
-					columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
+				if (column.getAppended() == null) {
+					final byte[] columnValueAsBytes;
+					if (value instanceof String) {
+						columnValueAsBytes = Bytes.toBytes((String) value);
+					} else if (value instanceof Integer) {
+						columnValueAsBytes = Bytes.toBytes((Integer) value);
+					} else if (value instanceof Long) {
+						columnValueAsBytes = Bytes.toBytes((Long) value);
+					} else if (value instanceof Boolean) {
+						columnValueAsBytes = Bytes.toBytes((Boolean) value);
+					} else if (value instanceof BigDecimal) {
+						columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
+					} else if (value instanceof Date) {
+						columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
+					} else {
+						throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
+					}
+					put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
 				} else {
-					throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
+					Appended appended = column.getAppended();
+					int itemIndex = 0;
+					for (Object item : (List) value) {
+						final Map<String, Object> itemAttributes = new HashMap<>();
+						appended.iterateColumns(item, true, new ColumnIteratingCallback() {
+							@Override
+							public void onColumn(Column column, Object value) {
+								if (value == null) {
+									return;
+								}
+								itemAttributes.put(column.getColumn(), value);
+							}
+						});
+						StringBuilder itemSB = new StringBuilder();
+						boolean started = false;
+						for (String attributeName : itemAttributes.keySet()) {
+							if (started) {
+								itemSB.append("|");
+							} else {
+								started = true;
+							}
+							itemSB.append(attributeName);
+							itemSB.append("=");
+							try {
+								itemSB.append(URLEncoder.encode(itemAttributes.get(attributeName).toString(), "UTF-8"));
+							} catch (UnsupportedEncodingException e) {
+								throw new RuntimeException("Unknown error on encoding string: " + itemAttributes.get(attributeName).toString(), e);
+							}
+						}
+						put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(itemIndex), Bytes.toBytes(itemSB.toString()));
+						itemIndex++;
+					}
 				}
-				put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
 			}
 		});
 		put.add(

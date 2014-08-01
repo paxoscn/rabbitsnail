@@ -2,115 +2,36 @@ package cn.paxos.rabbitsnail;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
+import java.lang.reflect.ParameterizedType;
 
 import javax.persistence.Id;
+import javax.persistence.OneToMany;
 import javax.persistence.Table;
-import javax.persistence.Transient;
 import javax.persistence.Version;
 
-import org.apache.hadoop.hbase.util.Bytes;
+public class Entity extends ColumnContainer {
 
-public class Entity {
-
-	private final Class<?> entityType;
 	private final String tableName;
-	private final Map<String, Column> columns;
-	private final Column idColumn;
-	private final Column versionColumn;
+	
+	private Column idColumn;
+	private Column versionColumn;
 
-	public Entity(Class<?> entityType) {
-		this.entityType = entityType;
-		columns = new HashMap<>();
-		if (!entityType.isAnnotationPresent(javax.persistence.Entity.class)) {
-			throw new RuntimeException("There is no @Entity annotation on " + entityType);
+	public Entity(Class<?> type) {
+		super(type);
+		if (!type.isAnnotationPresent(javax.persistence.Entity.class)) {
+			throw new RuntimeException("There is no @Entity annotation on " + type);
 		}
-		tableName = extractTableName(entityType);
-		Column idColumn_ = null;
-		Column versionColumn_ = null;
-		for (Method method : entityType.getMethods()) {
-			if (method.getName().equals("getClass")
-					|| !method.getName().startsWith("get")
-					|| method.getParameterTypes().length > 0
-					|| method.isAnnotationPresent(Transient.class)) {
-				continue;
-			}
-			String fieldName = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
-			final Class<?> fieldType = method.getReturnType();
-			Column column = new Column();
-			columns.put(fieldName, column);
-			if (method.isAnnotationPresent(Id.class)) {
-				idColumn_ = column;
-			}
-			if (method.isAnnotationPresent(Version.class)) {
-				versionColumn_ = column;
-			}
-			column.setGetter(method);
-			ColumnFamily columnFamily = method.getAnnotation(ColumnFamily.class);
-			if (columnFamily != null) {
-				column.setColumnFamily(columnFamily.name());
-			}
-			column.setColumn(this.extractColumnName(method));
-			try {
-				column.setSetter(entityType.getMethod("set" + method.getName().substring(3), fieldType));
-				column.setField(entityType.getDeclaredField(fieldName));
-			} catch (Exception e) {
-				throw new RuntimeException("There is no setter for " + entityType + "." + fieldName);
-			}
+		tableName = extractTableName(type);
+		if (idColumn == null) {
+			throw new RuntimeException("There is no id for " + type);
 		}
-		for (Field field : entityType.getDeclaredFields()) {
-			if (field.isAnnotationPresent(Transient.class)) {
-				continue;
-			}
-			String fieldName = field.getName();
-			Column column = columns.get(fieldName);
-			if (column == null) {
-				column = new Column();
-				columns.put(fieldName, column);
-			}
-			if (field.isAnnotationPresent(Id.class)) {
-				idColumn_ = column;
-			}
-			if (field.isAnnotationPresent(Version.class)) {
-				versionColumn_ = column;
-			}
-			field.setAccessible(true);
-			column.setField(field);
-			ColumnFamily columnFamily = field.getAnnotation(ColumnFamily.class);
-			if (columnFamily != null) {
-				column.setColumnFamily(columnFamily.name());
-			}
-			if (column.getColumn() == null) {
-				column.setColumn(this.extractColumnName(field));
-			}
-		}
-		if (idColumn_ == null) {
-			throw new RuntimeException("There is no id for " + entityType);
-		}
-		if (versionColumn_ == null) {
-			throw new RuntimeException("There is no version column for " + entityType);
-		}
-		idColumn = idColumn_;
-		versionColumn = versionColumn_;
-	}
-
-	public Object newInstance() {
-		try {
-			return entityType.newInstance();
-		} catch (Exception e) {
-			throw new RuntimeException("Error on initializing " + entityType, e);
+		if (versionColumn == null) {
+			throw new RuntimeException("There is no version column for " + type);
 		}
 	}
 
 	public byte[] getId(Object entity) {
 		return (byte[]) idColumn.get(entity);
-	}
-
-	public void iterateColumns(Object entity, boolean valueNeeded, ColumnIteratingCallback columnIteratingCallback) {
-		for (Column column : columns.values()) {
-			columnIteratingCallback.onColumn(column, valueNeeded ? column.get(entity) : Void.class);
-		}
 	}
 	
 	public String getTableName() {
@@ -125,6 +46,32 @@ public class Entity {
 		return versionColumn;
 	}
 
+	@Override
+	protected void onGetter(Column column, Method getter) {
+		if (getter.isAnnotationPresent(Id.class)) {
+			idColumn = column;
+		}
+		if (getter.isAnnotationPresent(Version.class)) {
+			versionColumn = column;
+		}
+		if (getter.isAnnotationPresent(OneToMany.class)) {
+			column.setAppended(new Appended((Class<?>) ((ParameterizedType) getter.getGenericReturnType()).getActualTypeArguments()[0]));
+		}
+	}
+
+	@Override
+	protected void onField(Column column, Field field) {
+		if (field.isAnnotationPresent(Id.class)) {
+			idColumn = column;
+		}
+		if (field.isAnnotationPresent(Version.class)) {
+			versionColumn = column;
+		}
+		if (field.isAnnotationPresent(OneToMany.class)) {
+			column.setAppended(new Appended((Class<?>) ((ParameterizedType) field.getGenericType()).getActualTypeArguments()[0]));
+		}
+	}
+
 	private static String extractTableName(Class<?> entityClass) {
 		final String tableName;
 		Table table = entityClass.getAnnotation(Table.class);
@@ -134,28 +81,6 @@ public class Entity {
 			tableName = table.name();
 		}
 		return tableName;
-	}
-
-	private String extractColumnName(Method method) {
-		final String columnName;
-		javax.persistence.Column column = method.getAnnotation(javax.persistence.Column.class);
-		if (column == null) {
-			columnName = null;
-		} else {
-			columnName = column.name();
-		}
-		return columnName;
-	}
-
-	private String extractColumnName(Field field) {
-		final String columnName;
-		javax.persistence.Column column = field.getAnnotation(javax.persistence.Column.class);
-		if (column == null) {
-			columnName = field.getName();
-		} else {
-			columnName = column.name();
-		}
-		return columnName;
 	}
 
 }

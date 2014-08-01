@@ -10,6 +10,7 @@ public class Column {
 	private Method getter;
 	private Method setter;
 	private Field field;
+	private Appended appended;
 	
 	public Object get(Object entity) {
 		try {
@@ -72,6 +73,12 @@ public class Column {
 	}
 	public void setField(Field field) {
 		this.field = field;
+	}
+	public Appended getAppended() {
+		return appended;
+	}
+	public void setAppended(Appended appended) {
+		this.appended = appended;
 	}
 	
 }
