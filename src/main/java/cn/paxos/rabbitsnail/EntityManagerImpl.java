@@ -281,6 +281,9 @@ public class EntityManagerImpl implements EntityManager {
 	}
 
 	private boolean put(final Entity entityDefinition, final Object entity, byte[] id, Integer oldVersion) {
+		if (entityDefinition.getVersionColumn() == null) {
+			throw new RuntimeException("There is no version column for " + entity.getClass());
+		}
 		final Put put = new Put(id);
 		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
 			@SuppressWarnings("rawtypes")

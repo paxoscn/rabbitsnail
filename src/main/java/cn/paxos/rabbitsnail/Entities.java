@@ -12,7 +12,7 @@ public class Entities {
 		for (String managedClassName : managedClassNames) {
 			final Class<?> entityType;
 			try {
-				entityType = Class.forName(managedClassName);
+				entityType = Class.forName(managedClassName, true, Thread.currentThread().getContextClassLoader());
 			} catch (ClassNotFoundException e) {
 				throw new RuntimeException("Failed to load " + managedClassName, e);
 			}

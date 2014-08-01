@@ -25,9 +25,6 @@ public class Entity extends ColumnContainer {
 		if (idColumn == null) {
 			throw new RuntimeException("There is no id for " + type);
 		}
-		if (versionColumn == null) {
-			throw new RuntimeException("There is no version column for " + type);
-		}
 	}
 
 	public byte[] getId(Object entity) {
