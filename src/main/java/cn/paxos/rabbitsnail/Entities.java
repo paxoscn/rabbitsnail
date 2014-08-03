@@ -6,7 +6,7 @@ import java.util.Map;
 
 public class Entities {
 	
-	private final Map<Class<?>, Entity> entityMap = new HashMap<>();
+	private final Map<Class<?>, Entity> entityMap = new HashMap<Class<?>, Entity>();
 
 	public Entities(List<String> managedClassNames) {
 		for (String managedClassName : managedClassNames) {

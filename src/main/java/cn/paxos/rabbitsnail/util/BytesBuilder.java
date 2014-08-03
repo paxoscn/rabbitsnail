@@ -7,7 +7,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 
 public class BytesBuilder {
 	
-	private final List<byte[]> byteArrayList = new LinkedList<>();
+	private final List<byte[]> byteArrayList = new LinkedList<byte[]>();
 	
 	public BytesBuilder add(byte[] added) {
 		byteArrayList.add(added);

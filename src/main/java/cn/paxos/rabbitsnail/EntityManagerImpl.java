@@ -63,10 +63,17 @@ public class EntityManagerImpl implements EntityManager {
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
 		Delete delete = new Delete(id);
-		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
+		HTable hTable = null;
+		try {
+			hTable = new HTable(conf, entityDefinition.getTableName());
 			hTable.delete(delete);
 		} catch (Exception e) {
 			throw new RuntimeException("Error on deleting " + entity.getClass(), e);
+		} finally {
+			if (hTable != null)
+				try {
+					hTable.close();
+				} catch (Exception e) {}
 		}
 	}
 
@@ -77,7 +84,9 @@ public class EntityManagerImpl implements EntityManager {
 		Get get = new Get((byte[]) primaryKey);
 		final String tableName = entityDefinition.getTableName();
 		final Result result;
-		try (HTable hTable = new HTable(conf, tableName)) {
+		HTable hTable = null;
+		try {
+			hTable = new HTable(conf, tableName);
 			result = hTable.get(get);
 			if (result.isEmpty()) {
 				return null;
@@ -86,6 +95,11 @@ public class EntityManagerImpl implements EntityManager {
 			return (T) entity;
 		} catch (Exception e) {
 			throw new RuntimeException("Error on fetching " + entityClass + "#" + Bytes.toHex((byte[]) primaryKey), e);
+		} finally {
+			if (hTable != null)
+				try {
+					hTable.close();
+				} catch (Exception e) {}
 		}
 	}
 
@@ -221,7 +235,7 @@ public class EntityManagerImpl implements EntityManager {
 							list.add(item);
 							String itemValue = Bytes.toString(result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(itemIndex)));
 							StringTokenizer st = new StringTokenizer(itemValue, "|");
-							final Map<String, String> attributeMap = new HashMap<>();
+							final Map<String, String> attributeMap = new HashMap<String, String>();
 							while (st.hasMoreTokens()) {
 								String keyAndValue = st.nextToken();
 								String[] keyAndValueArray = keyAndValue.split("=");
@@ -317,7 +331,7 @@ public class EntityManagerImpl implements EntityManager {
 					Appended appended = column.getAppended();
 					int itemIndex = 0;
 					for (Object item : (List) value) {
-						final Map<String, Object> itemAttributes = new HashMap<>();
+						final Map<String, Object> itemAttributes = new HashMap<String, Object>();
 						appended.iterateColumns(item, true, new ColumnIteratingCallback() {
 							@Override
 							public void onColumn(Column column, Object value) {
@@ -353,7 +367,9 @@ public class EntityManagerImpl implements EntityManager {
 				Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
 				Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
 				Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
-		try (HTable hTable = new HTable(conf, entityDefinition.getTableName())) {
+		HTable hTable = null;
+		try {
+			hTable = new HTable(conf, entityDefinition.getTableName());
 			return hTable.checkAndPut(
 					id,
 					Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
@@ -362,6 +378,11 @@ public class EntityManagerImpl implements EntityManager {
 					put);
 		} catch (Exception e) {
 			throw new RuntimeException("Error on saving " + entity.getClass(), e);
+		} finally {
+			if (hTable != null)
+				try {
+					hTable.close();
+				} catch (Exception e) {}
 		}
 	}
 

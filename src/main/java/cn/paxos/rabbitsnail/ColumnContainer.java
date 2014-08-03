@@ -14,7 +14,7 @@ public abstract class ColumnContainer {
 
 	public ColumnContainer(Class<?> type) {
 		this.type = type;
-		this.columns = new HashMap<>();
+		this.columns = new HashMap<String, Column>();
 		for (Method method : type.getMethods()) {
 			if (method.getName().equals("getClass")
 					|| !method.getName().startsWith("get")

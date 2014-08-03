@@ -30,7 +30,7 @@ public class QueryImpl implements Query {
 	public QueryImpl(EntityManagerImpl entityManagerImpl, String qlString) {
 		this.entityManagerImpl = entityManagerImpl;
 		this.qlString = qlString;
-		this.parameters = new HashMap<>();
+		this.parameters = new HashMap<Integer, Object>();
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -62,7 +62,9 @@ public class QueryImpl implements Query {
 			}
 		}
 		List results = new LinkedList();
-		try (HTable hTable = new HTable(entityManagerImpl.getConf(), entityDefinition.getTableName())) {
+		HTable hTable = null;
+		try {
+			hTable = new HTable(entityManagerImpl.getConf(), entityDefinition.getTableName());
 			ResultScanner rs = hTable.getScanner(scan);
 			for(Result r : rs) {
 				final Object entity = entityManagerImpl.readEntityFromResult(entityDefinition, r);
@@ -70,6 +72,11 @@ public class QueryImpl implements Query {
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Error on querying: " + qlString, e);
+		} finally {
+			if (hTable != null)
+				try {
+					hTable.close();
+				} catch (Exception e) {}
 		}
 		return results;
 	}
