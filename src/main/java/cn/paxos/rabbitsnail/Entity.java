@@ -18,9 +18,9 @@ public class Entity extends ColumnContainer {
 
 	public Entity(Class<?> type) {
 		super(type);
-		if (!type.isAnnotationPresent(javax.persistence.Entity.class)) {
-			throw new RuntimeException("There is no @Entity annotation on " + type);
-		}
+//		if (!type.isAnnotationPresent(javax.persistence.Entity.class)) {
+//			throw new RuntimeException("There is no @Entity annotation on " + type);
+//		}
 		tableName = extractTableName(type);
 		if (idColumn == null) {
 			throw new RuntimeException("There is no id for " + type);
@@ -70,10 +70,17 @@ public class Entity extends ColumnContainer {
 	}
 
 	private static String extractTableName(Class<?> entityClass) {
+		Class<?> annotatedClass = entityClass;
+		while (!annotatedClass.isAnnotationPresent(javax.persistence.Entity.class)) {
+			annotatedClass = annotatedClass.getSuperclass();
+			if (annotatedClass.equals(Object.class)) {
+				throw new RuntimeException("There is no @Entity annotation on " + entityClass);
+			}
+		}
 		final String tableName;
-		Table table = entityClass.getAnnotation(Table.class);
+		Table table = annotatedClass.getAnnotation(Table.class);
 		if (table == null) {
-			tableName = entityClass.getSimpleName().toLowerCase();
+			tableName = annotatedClass.getSimpleName().toLowerCase();
 		} else {
 			tableName = table.name();
 		}

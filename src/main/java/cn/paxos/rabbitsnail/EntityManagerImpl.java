@@ -24,6 +24,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 
+import cn.paxos.rabbitsnail.util.ByteArrayUtils;
+
 public class EntityManagerImpl implements EntityManager {
 
 	private final Configuration conf;
@@ -143,7 +145,7 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public Query createQuery(String qlString) {
-		return new QueryImpl(this, qlString);
+		return new QueryImpl(this, qlString.trim());
 	}
 
 	@Override
@@ -295,9 +297,9 @@ public class EntityManagerImpl implements EntityManager {
 	}
 
 	private boolean put(final Entity entityDefinition, final Object entity, byte[] id, Integer oldVersion) {
-		if (entityDefinition.getVersionColumn() == null) {
-			throw new RuntimeException("There is no version column for " + entity.getClass());
-		}
+//		if (entityDefinition.getVersionColumn() == null) {
+//			throw new RuntimeException("There is no version column for " + entity.getClass());
+//		}
 		final Put put = new Put(id);
 		entityDefinition.iterateColumns(entity, true, new ColumnIteratingCallback() {
 			@SuppressWarnings("rawtypes")
@@ -310,22 +312,7 @@ public class EntityManagerImpl implements EntityManager {
 					return;
 				}
 				if (column.getAppended() == null) {
-					final byte[] columnValueAsBytes;
-					if (value instanceof String) {
-						columnValueAsBytes = Bytes.toBytes((String) value);
-					} else if (value instanceof Integer) {
-						columnValueAsBytes = Bytes.toBytes((Integer) value);
-					} else if (value instanceof Long) {
-						columnValueAsBytes = Bytes.toBytes((Long) value);
-					} else if (value instanceof Boolean) {
-						columnValueAsBytes = Bytes.toBytes((Boolean) value);
-					} else if (value instanceof BigDecimal) {
-						columnValueAsBytes = Bytes.toBytes((BigDecimal) value);
-					} else if (value instanceof Date) {
-						columnValueAsBytes = Bytes.toBytes((int) ((Date) value).getTime());
-					} else {
-						throw new RuntimeException("Unknown column value type: " + value + " from " + entity.getClass() + "." + column.getColumnFamily() + ":" + column.getColumn());
-					}
+					final byte[] columnValueAsBytes = ByteArrayUtils.toBytes(value);
 					put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
 				} else {
 					Appended appended = column.getAppended();
@@ -363,19 +350,24 @@ public class EntityManagerImpl implements EntityManager {
 				}
 			}
 		});
-		put.add(
-				Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
-				Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
-				Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
 		HTable hTable = null;
 		try {
 			hTable = new HTable(conf, entityDefinition.getTableName());
-			return hTable.checkAndPut(
-					id,
-					Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
-					Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
-					oldVersion == null ? null : Bytes.toBytes(oldVersion),
-					put);
+			if (entityDefinition.getVersionColumn() != null) {
+				put.add(
+						Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+						Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+						Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
+				return hTable.checkAndPut(
+						id,
+						Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+						Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+						oldVersion == null ? null : Bytes.toBytes(oldVersion),
+						put);
+			} else {
+				hTable.put(put);
+				return true;
+			}
 		} catch (Exception e) {
 			throw new RuntimeException("Error on saving " + entity.getClass(), e);
 		} finally {

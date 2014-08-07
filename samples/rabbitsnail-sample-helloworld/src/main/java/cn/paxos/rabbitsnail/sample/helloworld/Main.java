@@ -17,20 +17,34 @@ public class Main {
 		UserRepository userRepository = (UserRepository) applicationContext.getBean("userRepository");
 		
 		User user = new User();
-		byte[] id = new BytesBuilder().add("USER").add(System.currentTimeMillis()).toBytes();
-		user.setId(id);
+		byte[] id1 = new BytesBuilder().add("USER").add(System.currentTimeMillis()).toBytes();
+		user.setId(id1);
 		user.setName("Tom");
 		userRepository.persistUser(user);
 		
-		user = userRepository.loadUserById(id);
-		System.out.println("Loaded User: " + user.getName() + " (version = " + user.getVersion() + ")");
-		
+		user = new User();
+		byte[] id2 = new BytesBuilder().add("USER").add(System.currentTimeMillis()).toBytes();
+		user.setId(id2);
 		user.setName("Jerry");
+		userRepository.persistUser(user);
+		
+		user = userRepository.loadUserById(id2);
+		System.out.println("Loaded User: " + user.getName());
+
+		boolean updated = userRepository.updateUserNamedTom(id1, "Felix");
+		// Successful.
+		System.out.println("Updated Tom's name successfully? " + updated);
+		updated = userRepository.updateUserNamedTom(id1, "Carfield");
+		// Failed as Tom has renamed to Felix.
+		System.out.println("Failed to update Tom's name? " + !updated);
+		
+		user.setName("Mickey");
 		userRepository.mergeUser(user);
 		
 		List<User> users = userRepository.findRecentlyCreatedUsers();
+		// Felix and Mickey expected.
 		for (User user_ : users) {
-			System.out.println("Found User: " + user_.getName() + " (version = " + user_.getVersion() + ")");
+			System.out.println("Found User: " + user_.getName());
 			userRepository.deleteUser(user_);
 		}
 	}

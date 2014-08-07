@@ -3,6 +3,8 @@ package cn.paxos.rabbitsnail;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 import javax.persistence.Transient;
@@ -24,7 +26,7 @@ public abstract class ColumnContainer {
 			}
 			String fieldName = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
 			final Class<?> fieldType = method.getReturnType();
-			Column column = new Column();
+			Column column = new Column(fieldName);
 			columns.put(fieldName, column);
 			this.onGetter(column, method);
 			column.setGetter(method);
@@ -35,19 +37,19 @@ public abstract class ColumnContainer {
 			column.setColumn(this.extractColumnName(method));
 			try {
 				column.setSetter(type.getMethod("set" + method.getName().substring(3), fieldType));
-				column.setField(type.getDeclaredField(fieldName));
+				column.setField(searchDeclaredField(type, fieldName));
 			} catch (Exception e) {
 				throw new RuntimeException("There is no setter for " + type + "." + fieldName);
 			}
 		}
-		for (Field field : type.getDeclaredFields()) {
+		for (Field field : searchDeclaredFields(type)) {
 			if (field.isAnnotationPresent(Transient.class)) {
 				continue;
 			}
 			String fieldName = field.getName();
 			Column column = columns.get(fieldName);
 			if (column == null) {
-				column = new Column();
+				column = new Column(fieldName);
 				columns.put(fieldName, column);
 			}
 			this.onField(column, field);
@@ -75,6 +77,10 @@ public abstract class ColumnContainer {
 		for (Column column : this.getColumns().values()) {
 			columnIteratingCallback.onColumn(column, valueNeeded ? column.get(columnContainer) : Void.class);
 		}
+	}
+
+	public Column getColumn(String fieldName) {
+		return columns.get(fieldName);
 	}
 
 	protected abstract void onGetter(Column column, Method getter);
@@ -109,6 +115,25 @@ public abstract class ColumnContainer {
 			columnName = column.name();
 		}
 		return columnName;
+	}
+
+	private Field searchDeclaredField(Class<?> searchingType, String fieldName) {
+		try {
+			return searchingType.getDeclaredField(fieldName);
+		} catch (Exception e) {
+			return searchDeclaredField(searchingType.getSuperclass(), fieldName);
+		}
+	}
+
+	private List<Field> searchDeclaredFields(Class<?> searchingType) {
+		List<Field> fields = new LinkedList<Field>();
+		while (!searchingType.equals(Object.class)) {
+			for (Field field : searchingType.getDeclaredFields()) {
+				fields.add(field);
+			}
+			searchingType = searchingType.getSuperclass();
+		}
+		return fields;
 	}
 
 }

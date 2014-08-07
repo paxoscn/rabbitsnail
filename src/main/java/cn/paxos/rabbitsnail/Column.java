@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 
 public class Column {
 
+	private final String name;
 	private String columnFamily;
 	private String column;
 	private Method getter;
@@ -12,6 +13,10 @@ public class Column {
 	private Field field;
 	private Appended appended;
 	
+	public Column(String name) {
+		this.name = name;
+	}
+
 	public Object get(Object entity) {
 		try {
 			if (getter != null) {
@@ -44,6 +49,9 @@ public class Column {
 		}
 	}
 	
+	public String getName() {
+		return name;
+	}
 	public String getColumnFamily() {
 		return columnFamily;
 	}

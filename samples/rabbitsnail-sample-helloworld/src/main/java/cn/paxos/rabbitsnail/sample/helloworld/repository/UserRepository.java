@@ -33,6 +33,14 @@ public class UserRepository {
 		return query.getResultList();
 	}
 
+	public boolean updateUserNamedTom(byte[] id, String newName) {
+		Query query = entityManager.createQuery("update User set name = ? where id = ? and name = ?");
+		query.setParameter(1, newName);
+		query.setParameter(2, id);
+		query.setParameter(3, "Tom");
+		return query.executeUpdate() > 0;
+	}
+
 	public void deleteUser(User user) {
 		entityManager.remove(user);
 	}

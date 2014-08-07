@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import cn.paxos.rabbitsnail.util.Compiler;
+
 public class Entities {
 	
 	private final Map<Class<?>, Entity> entityMap = new HashMap<Class<?>, Entity>();
@@ -17,6 +19,9 @@ public class Entities {
 				throw new RuntimeException("Failed to load " + managedClassName, e);
 			}
 			entityMap.put(entityType, new Entity(entityType));
+//			Class<?> hacked = hack(entityType);
+//			entityMap.put(entityType, new Entity(hacked));
+//			entityMap.put(hacked, new Entity(hacked));
 		}
 	}
 
@@ -37,5 +42,10 @@ public class Entities {
 		}
 		throw new RuntimeException("Unmapped class: " + entityTypeName);
 	}
+
+//	private Class<?> hack(Class<?> entityType) {
+//		String newTypeName = entityType.getSimpleName() + (int) (Math.random() * 10000000);
+//		return Compiler.compile(newTypeName, "public class " + newTypeName + " extends " + entityType.getName() + " {}");
+//	}
 
 }
