@@ -1,5 +1,6 @@
 package cn.paxos.rabbitsnail;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.net.URLDecoder;
@@ -14,12 +15,15 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityTransaction;
 import javax.persistence.FlushModeType;
 import javax.persistence.LockModeType;
+import javax.persistence.PersistenceException;
 import javax.persistence.Query;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HConnectionManager;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -29,10 +33,21 @@ import cn.paxos.rabbitsnail.util.ByteArrayUtils;
 public class EntityManagerImpl implements EntityManager {
 
 	private final Configuration conf;
+	private final ThreadLocal<HConnection> connection;
 	private final Entities entities;
 
 	public EntityManagerImpl(Configuration conf, Entities entities) {
 		this.conf = conf;
+		this.connection = new ThreadLocal<HConnection>() {
+			@Override
+			protected HConnection initialValue() {
+				try {
+					return HConnectionManager.createConnection(EntityManagerImpl.this.conf);
+				} catch (IOException e) {
+					throw new RuntimeException("Failed to connect HBase", e);
+				}
+			}
+		};
 		this.entities = entities;
 	}
 
@@ -40,7 +55,10 @@ public class EntityManagerImpl implements EntityManager {
 	public void persist(final Object entity) {
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
-		this.put(entityDefinition, entity, id, null);
+		boolean saved = this.put(entityDefinition, entity, id, null);
+		if (!saved) {
+			throw new PersistenceException("Failed to persist " + entity);
+		}
 	}
 
 	@SuppressWarnings("unchecked")
@@ -48,14 +66,17 @@ public class EntityManagerImpl implements EntityManager {
 	public <T> T merge(T entity) {
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
-		while (true) {
+		if (entityDefinition.getVersionColumn() == null) {
+			this.put(entityDefinition, entity, id, null);
+			return (T) this.find(entity.getClass(), id);
+		} else {
 			Object latestEntity = this.find(entity.getClass(), id);
 			int oldVersion = (Integer) entityDefinition.getVersionColumn().get(latestEntity);
 			boolean saved = this.put(entityDefinition, entity, id, oldVersion);
 			if (saved) {
 				return (T) this.find(entity.getClass(), id);
 			} else {
-				try { Thread.sleep(100); } catch (InterruptedException e) {}
+				throw new PersistenceException("Failed to merge " + entity);
 			}
 		}
 	}
@@ -65,9 +86,9 @@ public class EntityManagerImpl implements EntityManager {
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
 		Delete delete = new Delete(id);
-		HTable hTable = null;
+		HTableInterface hTable = null;
 		try {
-			hTable = new HTable(conf, entityDefinition.getTableName());
+			hTable = this.getTable(entityDefinition.getTableName());
 			hTable.delete(delete);
 		} catch (Exception e) {
 			throw new RuntimeException("Error on deleting " + entity.getClass(), e);
@@ -86,9 +107,9 @@ public class EntityManagerImpl implements EntityManager {
 		Get get = new Get((byte[]) primaryKey);
 		final String tableName = entityDefinition.getTableName();
 		final Result result;
-		HTable hTable = null;
+		HTableInterface hTable = null;
 		try {
-			hTable = new HTable(conf, tableName);
+			hTable = getTable(tableName);
 			result = hTable.get(get);
 			if (result.isEmpty()) {
 				return null;
@@ -135,7 +156,16 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public void clear() {
-		throw new UnsupportedOperationException();
+		HConnection hConnection = connection.get();
+		if (hConnection != null) {
+			try {
+				hConnection.close();
+			} catch (IOException e) {
+				// TODO log
+//				throw new RuntimeException("Failed to close the connection", e);
+			}
+			connection.remove();
+		}
 	}
 
 	@Override
@@ -175,7 +205,7 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public Object getDelegate() {
-		throw new UnsupportedOperationException();
+		return this;
 	}
 
 	@Override
@@ -192,6 +222,14 @@ public class EntityManagerImpl implements EntityManager {
 		throw new UnsupportedOperationException();
 	}
 
+	public HTableInterface getTable(String tableName) {
+		try {
+			return connection.get().getTable(tableName);
+		} catch (IOException e) {
+			throw new RuntimeException("Failed to connect table " + tableName, e);
+		}
+	}
+
 	Object readEntityFromResult(final Entity entityDefinition, final Result result) {
 		final Object entity = entityDefinition.newInstance();
 		entityDefinition.iterateColumns(entity, false, new ColumnIteratingCallback() {
@@ -206,27 +244,7 @@ public class EntityManagerImpl implements EntityManager {
 						if (columnValueAsBytes == null) {
 							return;
 						}
-						Class<?> fieldType = column.getType();
-						final Object fieldValue;
-						if (String.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toString(columnValueAsBytes);
-						} else if (Integer.class.isAssignableFrom(fieldType)
-								|| int.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toInt(columnValueAsBytes);
-						} else if (Long.class.isAssignableFrom(fieldType)
-								|| long.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toLong(columnValueAsBytes);
-						} else if (Boolean.class.isAssignableFrom(fieldType)
-								|| boolean.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toBoolean(columnValueAsBytes);
-						} else if (BigDecimal.class.isAssignableFrom(fieldType)) {
-							fieldValue = Bytes.toBigDecimal(columnValueAsBytes);
-						} else if (Date.class.isAssignableFrom(fieldType)) {
-							fieldValue = new Date(Bytes.toLong(columnValueAsBytes));
-						} else {
-							throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + entity.getClass() + "." + column.getField().getName());
-						}
-						column.set(entity, fieldValue);
+						column.set(entity, ByteArrayUtils.fromBytes(column.getType(), columnValueAsBytes));
 					} else {
 						@SuppressWarnings("rawtypes")
 						List list = (List) column.get(entity);
@@ -240,6 +258,10 @@ public class EntityManagerImpl implements EntityManager {
 							final Map<String, String> attributeMap = new HashMap<String, String>();
 							while (st.hasMoreTokens()) {
 								String keyAndValue = st.nextToken();
+								if (keyAndValue.indexOf("=") < 0) {
+									// TODO log. This is for currupted data.
+									continue;
+								}
 								String[] keyAndValueArray = keyAndValue.split("=");
 								String attributeKey = keyAndValueArray[0];
 								try {
@@ -286,10 +308,6 @@ public class EntityManagerImpl implements EntityManager {
 			}
 		});
 		return entity;
-	}
-	
-	Configuration getConf() {
-		return conf;
 	}
 
 	Entities getEntities() {
@@ -350,14 +368,17 @@ public class EntityManagerImpl implements EntityManager {
 				}
 			}
 		});
-		HTable hTable = null;
+		HTableInterface hTable = null;
 		try {
-			hTable = new HTable(conf, entityDefinition.getTableName());
+			hTable = getTable(entityDefinition.getTableName());
 			if (entityDefinition.getVersionColumn() != null) {
-				put.add(
-						Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
-						Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
-						Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
+				// Only auto set int version.
+				if (entityDefinition.getVersionColumn().getType().equals(int.class)) {
+					put.add(
+							Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
+							Bytes.toBytes(entityDefinition.getVersionColumn().getColumn()),
+							Bytes.toBytes(oldVersion == null ? 1 : oldVersion + 1));
+				}
 				return hTable.checkAndPut(
 						id,
 						Bytes.toBytes(entityDefinition.getVersionColumn().getColumnFamily()),
@@ -376,6 +397,17 @@ public class EntityManagerImpl implements EntityManager {
 					hTable.close();
 				} catch (Exception e) {}
 		}
+	}
+	
+	public static void main(String[] args) {
+		ThreadLocal<String> t = new ThreadLocal<String>() {
+			@Override
+			protected String initialValue() {
+				return "abc";
+			}
+		};
+		System.out.println(t.get());
+		System.out.println(t.get());
 	}
 
 }

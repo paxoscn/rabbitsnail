@@ -46,6 +46,8 @@ public class Main {
 		for (OrderItem item_ : order.getItems()) {
 			System.out.println("Item #" + (++itemIndex) + ": " + item_.getName() + " $" + item_.getAmount());
 		}
+		
+		orderRepository.close();
 	}
 
 }

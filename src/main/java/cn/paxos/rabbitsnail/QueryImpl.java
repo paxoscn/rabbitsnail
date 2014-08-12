@@ -13,7 +13,7 @@ import javax.persistence.FlushModeType;
 import javax.persistence.Query;
 import javax.persistence.TemporalType;
 
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -68,9 +68,9 @@ public class QueryImpl implements Query {
 			}
 		}
 		List results = new LinkedList();
-		HTable hTable = null;
+		HTableInterface hTable = null;
 		try {
-			hTable = new HTable(entityManagerImpl.getConf(), entityDefinition.getTableName());
+			hTable = entityManagerImpl.getTable(entityDefinition.getTableName());
 			ResultScanner rs = hTable.getScanner(scan);
 			for(Result r : rs) {
 				final Object entity = entityManagerImpl.readEntityFromResult(entityDefinition, r);
@@ -138,9 +138,9 @@ public class QueryImpl implements Query {
 			put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()), columnValueAsBytes);
 			parameterIndex++;
 		}
-		HTable hTable = null;
+		HTableInterface hTable = null;
 		try {
-			hTable = new HTable(entityManagerImpl.getConf(), entityDefinition.getTableName());
+			hTable = entityManagerImpl.getTable(entityDefinition.getTableName());
 			if (checkingFieldName == null) {
 				hTable.put(put);
 				return 1;

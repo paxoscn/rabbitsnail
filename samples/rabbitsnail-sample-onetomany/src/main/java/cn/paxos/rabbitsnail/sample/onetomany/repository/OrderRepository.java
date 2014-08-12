@@ -16,6 +16,10 @@ public class OrderRepository {
 	public Order loadOrderById(byte[] id) {
 		return entityManager.find(Order.class, id);
 	}
+
+	public void close() {
+		entityManager.clear();
+	}
 	
 	@PersistenceContext
 	public void setEntityManager(EntityManager entityManager) {

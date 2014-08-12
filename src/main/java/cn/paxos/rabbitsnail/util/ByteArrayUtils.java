@@ -26,10 +26,40 @@ public abstract class ByteArrayUtils {
 			bytes = Bytes.toBytes((BigDecimal) object);
 		} else if (object instanceof Date) {
 			bytes = Bytes.toBytes((int) ((Date) object).getTime());
+		} else if (object instanceof byte[]) {
+			bytes = (byte[]) object;
 		} else {
 			throw new RuntimeException("Failed on casting to byte array: " + object);
 		}
 		return bytes;
+	}
+	
+	public static Object fromBytes(Class<?> type, byte[] bytes) {
+		if (bytes == null) {
+			return null;
+		}
+		final Object object;
+		if (String.class.isAssignableFrom(type)) {
+			object = Bytes.toString(bytes);
+		} else if (Integer.class.isAssignableFrom(type)
+				|| int.class.isAssignableFrom(type)) {
+			object = Bytes.toInt(bytes);
+		} else if (Long.class.isAssignableFrom(type)
+				|| long.class.isAssignableFrom(type)) {
+			object = Bytes.toLong(bytes);
+		} else if (Boolean.class.isAssignableFrom(type)
+				|| boolean.class.isAssignableFrom(type)) {
+			object = Bytes.toBoolean(bytes);
+		} else if (BigDecimal.class.isAssignableFrom(type)) {
+			object = Bytes.toBigDecimal(bytes);
+		} else if (Date.class.isAssignableFrom(type)) {
+			object = new Date(Bytes.toLong(bytes));
+		} else if (byte[].class.isAssignableFrom(type)) {
+			object = bytes;
+		} else {
+			throw new RuntimeException("Unsupported value type: " + type);
+		}
+		return object;
 	}
 
 }

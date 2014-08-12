@@ -44,6 +44,10 @@ public class UserRepository {
 	public void deleteUser(User user) {
 		entityManager.remove(user);
 	}
+
+	public void close() {
+		entityManager.clear();
+	}
 	
 	@PersistenceContext
 	public void setEntityManager(EntityManager entityManager) {

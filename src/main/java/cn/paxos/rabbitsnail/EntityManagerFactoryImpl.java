@@ -10,17 +10,16 @@ import org.apache.hadoop.conf.Configuration;
 
 public class EntityManagerFactoryImpl implements EntityManagerFactory {
 
-	private final Configuration conf;
-	private final Entities entities;
+	// TODO Singlton or multiple ?
+	private final EntityManager entityManager;
 
 	public EntityManagerFactoryImpl(Configuration conf, List<String> managedClassNames) {
-		this.conf = conf;
-		this.entities = new Entities(managedClassNames);
+		this.entityManager = new EntityManagerImpl(conf, new Entities(managedClassNames));
 	}
 
 	@Override
 	public EntityManager createEntityManager() {
-		return new EntityManagerImpl(conf, entities);
+		return entityManager;
 	}
 
 	@Override

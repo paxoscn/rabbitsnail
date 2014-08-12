@@ -47,6 +47,8 @@ public class Main {
 			System.out.println("Found User: " + user_.getName());
 			userRepository.deleteUser(user_);
 		}
+		
+		userRepository.close();
 	}
 
 }
