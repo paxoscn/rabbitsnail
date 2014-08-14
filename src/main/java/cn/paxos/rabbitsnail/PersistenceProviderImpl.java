@@ -5,6 +5,7 @@ import java.util.Map;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.spi.PersistenceProvider;
 import javax.persistence.spi.PersistenceUnitInfo;
+import javax.persistence.spi.ProviderUtil;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -25,6 +26,21 @@ public class PersistenceProviderImpl implements PersistenceProvider {
 		Configuration conf = HBaseConfiguration.create();
 		conf.set(Constants.HBASE_ZOOKEEPER_QUORUM, hbaseZookeeperQuorum);
 		return new EntityManagerFactoryImpl(conf, info.getManagedClassNames());
+	}
+
+	@Override
+	public void generateSchema(PersistenceUnitInfo info, @SuppressWarnings("rawtypes") Map map) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public boolean generateSchema(String persistenceUnitName, @SuppressWarnings("rawtypes") Map map) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public ProviderUtil getProviderUtil() {
+		throw new UnsupportedOperationException();
 	}
 
 }

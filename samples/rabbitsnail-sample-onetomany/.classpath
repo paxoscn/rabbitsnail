@@ -7,7 +7,6 @@
   <classpathentry kind="var" path="M2_REPO/javax/activation/activation/1.1/activation-1.1.jar" sourcepath="M2_REPO/javax/activation/activation/1.1/activation-1.1-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/javax/inject/javax.inject/1/javax.inject-1.jar" sourcepath="M2_REPO/javax/inject/javax.inject/1/javax.inject-1-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar" sourcepath="M2_REPO/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1-sources.jar"/>
-  <classpathentry kind="var" path="M2_REPO/javax/persistence/persistence-api/1.0.2/persistence-api-1.0.2.jar" sourcepath="M2_REPO/javax/persistence/persistence-api/1.0.2/persistence-api-1.0.2-sources.jar"/>
   <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
   <classpathentry kind="var" path="M2_REPO/org/apache/hbase/hbase-server/0.98.2-hadoop2/hbase-server-0.98.2-hadoop2.jar" sourcepath="M2_REPO/org/apache/hbase/hbase-server/0.98.2-hadoop2/hbase-server-0.98.2-hadoop2-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/apache/hbase/hbase-common/0.98.2-hadoop2/hbase-common-0.98.2-hadoop2.jar" sourcepath="M2_REPO/org/apache/hbase/hbase-common/0.98.2-hadoop2/hbase-common-0.98.2-hadoop2-sources.jar"/>
@@ -91,7 +90,7 @@
   <classpathentry kind="var" path="M2_REPO/org/mortbay/jetty/jetty-sslengine/6.1.26/jetty-sslengine-6.1.26.jar" sourcepath="M2_REPO/org/mortbay/jetty/jetty-sslengine/6.1.26/jetty-sslengine-6.1.26-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/mortbay/jetty/jsp-2.1/6.1.14/jsp-2.1-6.1.14.jar" sourcepath="M2_REPO/org/mortbay/jetty/jsp-2.1/6.1.14/jsp-2.1-6.1.14-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/mortbay/jetty/jsp-api-2.1/6.1.14/jsp-api-2.1-6.1.14.jar" sourcepath="M2_REPO/org/mortbay/jetty/jsp-api-2.1/6.1.14/jsp-api-2.1-6.1.14-sources.jar"/>
-  <classpathentry kind="var" path="M2_REPO/org/mortbay/jetty/servlet-api-2.5/6.1.14/servlet-api-2.5-6.1.14.jar" sourcepath="M2_REPO/org/mortbay/jetty/servlet-api-2.5/6.1.14/servlet-api-2.5-6.1.14-sources.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/mortbay/jetty/servlet-api-2.5/6.1.14/servlet-api-2.5-6.1.14.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/jamon/jamon-runtime/2.3.1/jamon-runtime-2.3.1.jar" sourcepath="M2_REPO/org/jamon/jamon-runtime/2.3.1/jamon-runtime-2.3.1-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar" sourcepath="M2_REPO/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0-sources.jar"/>
@@ -115,5 +114,6 @@
   <classpathentry kind="var" path="M2_REPO/org/springframework/spring-orm/4.0.4.RELEASE/spring-orm-4.0.4.RELEASE.jar" sourcepath="M2_REPO/org/springframework/spring-orm/4.0.4.RELEASE/spring-orm-4.0.4.RELEASE-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/springframework/spring-jdbc/4.0.4.RELEASE/spring-jdbc-4.0.4.RELEASE.jar" sourcepath="M2_REPO/org/springframework/spring-jdbc/4.0.4.RELEASE/spring-jdbc-4.0.4.RELEASE-sources.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/springframework/spring-tx/4.0.4.RELEASE/spring-tx-4.0.4.RELEASE.jar" sourcepath="M2_REPO/org/springframework/spring-tx/4.0.4.RELEASE/spring-tx-4.0.4.RELEASE-sources.jar"/>
-  <classpathentry kind="var" path="M2_REPO/cn/paxos/rabbitsnail/rabbitsnail-entitymanager/0.0.1/rabbitsnail-entitymanager-0.0.1.jar"/>
+  <classpathentry kind="var" path="M2_REPO/cn/paxos/rabbitsnail/rabbitsnail-entitymanager/0.0.2/rabbitsnail-entitymanager-0.0.2.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/hibernate/javax/persistence/hibernate-jpa-2.1-api/1.0.0.Final/hibernate-jpa-2.1-api-1.0.0.Final.jar" sourcepath="M2_REPO/org/hibernate/javax/persistence/hibernate-jpa-2.1-api/1.0.0.Final/hibernate-jpa-2.1-api-1.0.0.Final-sources.jar"/>
 </classpath>
