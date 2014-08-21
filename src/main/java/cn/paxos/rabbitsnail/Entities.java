@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import cn.paxos.rabbitsnail.util.Compiler;
-
 public class Entities {
 	
 	private final Map<Class<?>, Entity> entityMap = new HashMap<Class<?>, Entity>();
