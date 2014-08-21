@@ -3,7 +3,7 @@ rabbitsnail
 
 A JPA entity manager for HBase
 
-The RabbitSnail entity manager implements a subset of JPA operations, including persisting/merging/deleting an entity, finding entities by a query, and one-to-many with the wide-table mode.
+The RabbitSnail entity manager implements a subset of JPA operations, including persisting/merging/deleting an entity, finding entities by a query, and one-to-many with the 'wide-table' design.
 Only a few JPA annotations are supported. Some new annotations are introduced to adapt HBase like @ColumnFamily.
 
 Tutorial: Hello World
