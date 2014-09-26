@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import cn.paxos.rabbitsnail.util.ByteArrayUtils;
@@ -32,14 +33,21 @@ public class QueryImpl implements Query {
 	private static final Pattern SETTING_PATTERN = Pattern.compile("^(.+)=.+$");
 	private static final Pattern CONDITION_PATTERN = Pattern.compile("^(.+)([=<>]).+$");
 
+	private static final Map<String, byte[]> INDEX_TO_ROW = new HashMap<String, byte[]>();
+	
 	private final EntityManagerImpl entityManagerImpl;
 	private final String qlString;
 	private final Map<Integer, Object> parameters;
+	
+	private int maxResult;
+	private int startPosition;
 
 	public QueryImpl(EntityManagerImpl entityManagerImpl, String qlString) {
 		this.entityManagerImpl = entityManagerImpl;
 		this.qlString = qlString;
 		this.parameters = new HashMap<Integer, Object>();
+		this.maxResult = -1;
+		this.startPosition = -1;
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -52,6 +60,7 @@ public class QueryImpl implements Query {
 		String entityTypeName = queryMatcher.group(1);
 		String whereClause = queryMatcher.group(2);
 		
+		String startRowHex = null;
 		int parameterIndex = 1;
 		Entity entityDefinition = entityManagerImpl.getEntities().byName(entityTypeName);
 		Scan scan = new Scan();
@@ -62,7 +71,9 @@ public class QueryImpl implements Query {
 				conditionMatcher.find();
 				String operator = conditionMatcher.group(2);
 				if (operator.equals(">")) {
-					scan.setStartRow((byte[]) parameters.get(parameterIndex++));
+					byte[] startRow = (byte[]) parameters.get(parameterIndex++);
+					startRowHex = Bytes.toHex(startRow);
+					scan.setStartRow(startRow);
 				} else if (operator.equals("<")) {
 					scan.setStopRow((byte[]) parameters.get(parameterIndex++));
 				} else {
@@ -70,14 +81,42 @@ public class QueryImpl implements Query {
 				}
 			}
 		}
+		boolean toCut = false;
+		if (startPosition > -1) {
+			String indexedRowKey = entityTypeName + "-" + startRowHex + "-" + (startPosition - 1);
+			final byte[] indexedRow;
+			synchronized (QueryImpl.class) {
+				indexedRow = INDEX_TO_ROW.get(indexedRowKey);
+			}
+			if (indexedRow == null) {
+				scan.setFilter(new PageFilter(startPosition + maxResult));
+				toCut = true;
+			} else {
+				scan.setStartRow(ByteArrayUtils.increaseOne(indexedRow));
+				scan.setFilter(new PageFilter(maxResult));
+			}
+		}
 		List results = new LinkedList();
 		HTableInterface hTable = null;
 		try {
 			hTable = entityManagerImpl.getTable(entityDefinition.getTableName());
 			ResultScanner rs = hTable.getScanner(scan);
+			int rowIndex = -1;
+			Result lastResult = null;
 			for(Result r : rs) {
+				rowIndex++;
+				lastResult = r;
+				if (toCut && rowIndex < startPosition) {
+					continue;
+				}
 				final Object entity = entityManagerImpl.readEntityFromResult(entityDefinition, r);
 				results.add(entity);
+			}
+			if (startPosition > -1 && lastResult != null) {
+				String indexedRowKey = entityTypeName + "-" + startRowHex + "-" + (startPosition + rowIndex);
+				synchronized (QueryImpl.class) {
+					INDEX_TO_ROW.put(indexedRowKey, lastResult.getRow());
+				}
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Error on querying: " + qlString, e);
@@ -168,12 +207,14 @@ public class QueryImpl implements Query {
 
 	@Override
 	public Query setMaxResults(int maxResult) {
-		throw new UnsupportedOperationException();
+		this.maxResult = maxResult;
+		return this;
 	}
 
 	@Override
 	public Query setFirstResult(int startPosition) {
-		throw new UnsupportedOperationException();
+		this.startPosition = startPosition;
+		return this;
 	}
 
 	@Override

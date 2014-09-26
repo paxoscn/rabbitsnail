@@ -3,9 +3,11 @@ package cn.paxos.rabbitsnail;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.persistence.Transient;
 
@@ -17,11 +19,15 @@ public abstract class ColumnContainer {
 	public ColumnContainer(Class<?> type) {
 		this.type = type;
 		this.columns = new HashMap<String, Column>();
+		Set<String> transientFields = new HashSet<String>();
 		for (Method method : type.getMethods()) {
 			if (method.getName().equals("getClass")
-					|| !method.getName().startsWith("get")
+					|| (!method.getName().startsWith("get"))
 					|| method.getParameterTypes().length > 0
 					|| method.isAnnotationPresent(Transient.class)) {
+				if (method.isAnnotationPresent(Transient.class)) {
+					transientFields.add(method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4));
+				}
 				continue;
 			}
 			String fieldName = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
@@ -43,7 +49,8 @@ public abstract class ColumnContainer {
 			}
 		}
 		for (Field field : searchDeclaredFields(type)) {
-			if (field.isAnnotationPresent(Transient.class)) {
+			if (field.isAnnotationPresent(Transient.class)
+					|| transientFields.contains(field.getName())) {
 				continue;
 			}
 			String fieldName = field.getName();

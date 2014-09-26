@@ -62,4 +62,24 @@ public abstract class ByteArrayUtils {
 		return object;
 	}
 
+	public static byte[] increaseOne(byte[] bytes) {
+		for (int i = bytes.length - 1; i >= 0; i--) {
+			byte b = bytes[i];
+			if (b != (byte) 0xFF) {
+				byte newByte = (byte) (b + 1);
+				bytes[i] = newByte;
+				return bytes;
+			}
+		}
+		throw new RuntimeException("It is an all-1 array!");
+	}
+	
+	public static void main(String[] args) {
+		byte[] b = new byte[2];
+		for (;;) {
+			b = increaseOne(b);
+			System.out.println(Bytes.toHex(b));
+		}
+	}
+
 }

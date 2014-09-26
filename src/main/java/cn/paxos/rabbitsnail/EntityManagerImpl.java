@@ -53,7 +53,7 @@ public class EntityManagerImpl implements EntityManager {
 				try {
 					return HConnectionManager.createConnection(EntityManagerImpl.this.conf);
 				} catch (IOException e) {
-					throw new RuntimeException("Failed to connect HBase", e);
+					throw new PersistenceException("Failed to connect HBase", e);
 				}
 			}
 		};
@@ -62,6 +62,9 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public void persist(final Object entity) {
+		if (entity == null) {
+			throw new PersistenceException("The entity to be persisted is null");
+		}
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
 		boolean saved = this.put(entityDefinition, entity, id, null);
@@ -73,6 +76,9 @@ public class EntityManagerImpl implements EntityManager {
 	@SuppressWarnings("unchecked")
 	@Override
 	public <T> T merge(T entity) {
+		if (entity == null) {
+			throw new PersistenceException("The entity to be merged is null");
+		}
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
 		if (entityDefinition.getVersionColumn() == null) {
@@ -92,6 +98,9 @@ public class EntityManagerImpl implements EntityManager {
 
 	@Override
 	public void remove(Object entity) {
+		if (entity == null) {
+			throw new PersistenceException("The entity to be removed is null");
+		}
 		final Entity entityDefinition = entities.byType(entity.getClass());
 		byte[] id = entityDefinition.getId(entity);
 		Delete delete = new Delete(id);
@@ -100,7 +109,7 @@ public class EntityManagerImpl implements EntityManager {
 			hTable = this.getTable(entityDefinition.getTableName());
 			hTable.delete(delete);
 		} catch (Exception e) {
-			throw new RuntimeException("Error on deleting " + entity.getClass(), e);
+			throw new PersistenceException("Error on deleting " + entity.getClass(), e);
 		} finally {
 			if (hTable != null)
 				try {
@@ -126,7 +135,7 @@ public class EntityManagerImpl implements EntityManager {
 			final Object entity = this.readEntityFromResult(entityDefinition, result);
 			return (T) entity;
 		} catch (Exception e) {
-			throw new RuntimeException("Error on fetching " + entityClass + "#" + Bytes.toHex((byte[]) primaryKey), e);
+			throw new PersistenceException("Error on fetching " + entityClass + "#" + Bytes.toHex((byte[]) primaryKey), e);
 		} finally {
 			if (hTable != null)
 				try {
@@ -235,7 +244,7 @@ public class EntityManagerImpl implements EntityManager {
 		try {
 			return connection.get().getTable(tableName);
 		} catch (IOException e) {
-			throw new RuntimeException("Failed to connect table " + tableName, e);
+			throw new PersistenceException("Failed to connect table " + tableName, e);
 		}
 	}
 
@@ -274,10 +283,10 @@ public class EntityManagerImpl implements EntityManager {
 								String[] keyAndValueArray = keyAndValue.split("=");
 								String attributeKey = keyAndValueArray[0];
 								try {
-									String attributeValue = URLDecoder.decode(keyAndValueArray[1], "UTF-8");
+									String attributeValue = keyAndValueArray.length < 2 ? "" : URLDecoder.decode(keyAndValueArray[1], "UTF-8");
 									attributeMap.put(attributeKey, attributeValue);
 								} catch (UnsupportedEncodingException e) {
-									throw new RuntimeException("Unknown error on encoding string: " + keyAndValueArray[1], e);
+									throw new PersistenceException("Unknown error on encoding string: " + keyAndValueArray[1], e);
 								}
 							}
 							appended.iterateColumns(item, false, new ColumnIteratingCallback() {
@@ -305,7 +314,7 @@ public class EntityManagerImpl implements EntityManager {
 									} else if (Date.class.isAssignableFrom(fieldType)) {
 										readValue = new Date(Long.parseLong(readValueAsString));
 									} else {
-										throw new RuntimeException("Unsupported column value type: " + fieldType + " of " + item.getClass() + "." + column.getField().getName());
+										throw new PersistenceException("Unsupported column value type: " + fieldType + " of " + item.getClass() + "." + column.getField().getName());
 									}
 									column.set(item, readValue);
 								}
@@ -368,7 +377,7 @@ public class EntityManagerImpl implements EntityManager {
 							try {
 								itemSB.append(URLEncoder.encode(itemAttributes.get(attributeName).toString(), "UTF-8"));
 							} catch (UnsupportedEncodingException e) {
-								throw new RuntimeException("Unknown error on encoding string: " + itemAttributes.get(attributeName).toString(), e);
+								throw new PersistenceException("Unknown error on encoding string: " + itemAttributes.get(attributeName).toString(), e);
 							}
 						}
 						put.add(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(itemIndex), Bytes.toBytes(itemSB.toString()));
@@ -399,7 +408,7 @@ public class EntityManagerImpl implements EntityManager {
 				return true;
 			}
 		} catch (Exception e) {
-			throw new RuntimeException("Error on saving " + entity.getClass(), e);
+			throw new PersistenceException("Error on saving " + entity.getClass(), e);
 		} finally {
 			if (hTable != null)
 				try {
