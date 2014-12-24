@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>cn.paxos.rabbitsnail</groupId>
     <artifactId>rabbitsnail-entitymanager</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
     <name>rabbitsnail-entitymanager</name>
     <description>A JPA entity manager for HBase</description>
     <url>https://github.com/paxoscn/rabbitsnail</url>
