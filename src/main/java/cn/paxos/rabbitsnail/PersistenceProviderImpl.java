@@ -22,9 +22,9 @@ public class PersistenceProviderImpl implements PersistenceProvider {
 	@Override
 	public EntityManagerFactory createContainerEntityManagerFactory(
 			PersistenceUnitInfo info, @SuppressWarnings("rawtypes") Map map) {
-		String hbaseZookeeperQuorum = (String) map.get(Constants.HBASE_ZOOKEEPER_QUORUM);
+//		String hbaseZookeeperQuorum = (String) map.get(Constants.HBASE_ZOOKEEPER_QUORUM);
 		Configuration conf = HBaseConfiguration.create();
-		conf.set(Constants.HBASE_ZOOKEEPER_QUORUM, hbaseZookeeperQuorum);
+//		conf.set(Constants.HBASE_ZOOKEEPER_QUORUM, hbaseZookeeperQuorum);
 		return new EntityManagerFactoryImpl(conf, info.getManagedClassNames());
 	}
 
