@@ -20,6 +20,8 @@ public abstract class ByteArrayUtils {
 			bytes = Bytes.toBytes((Integer) object);
 		} else if (object instanceof Long) {
 			bytes = Bytes.toBytes((Long) object);
+		} else if (object instanceof Double) {
+			bytes = Bytes.toBytes((Double) object);
 		} else if (object instanceof Boolean) {
 			bytes = Bytes.toBytes((Boolean) object);
 		} else if (object instanceof BigDecimal) {
@@ -47,6 +49,9 @@ public abstract class ByteArrayUtils {
 		} else if (Long.class.isAssignableFrom(type)
 				|| long.class.isAssignableFrom(type)) {
 			object = Bytes.toLong(bytes);
+		} else if (Double.class.isAssignableFrom(type)
+				|| double.class.isAssignableFrom(type)) {
+			object = Bytes.toDouble(bytes);
 		} else if (Boolean.class.isAssignableFrom(type)
 				|| boolean.class.isAssignableFrom(type)) {
 			object = Bytes.toBoolean(bytes);

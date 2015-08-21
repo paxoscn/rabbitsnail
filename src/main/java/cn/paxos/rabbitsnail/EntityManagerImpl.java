@@ -257,6 +257,10 @@ public class EntityManagerImpl implements EntityManager {
 				if (column == entityDefinition.getIdColumn()) {
 					column.set(entity, result.getRow());
 				} else {
+					if (column.getColumnFamily() == null || column.getColumn() == null) {
+						System.err.println("Unknown column of " + column.getName() + ": [" + column.getColumnFamily() + ":" + column.getColumn() + "]");
+						return;
+					}
 					if (column.getAppended() == null) {
 						final byte[] columnValueAsBytes = result.getValue(Bytes.toBytes(column.getColumnFamily()), Bytes.toBytes(column.getColumn()));
 						if (columnValueAsBytes == null) {
@@ -306,6 +310,9 @@ public class EntityManagerImpl implements EntityManager {
 									} else if (Long.class.isAssignableFrom(fieldType)
 											|| long.class.isAssignableFrom(fieldType)) {
 										readValue = Long.parseLong(readValueAsString);
+									} else if (Double.class.isAssignableFrom(fieldType)
+											|| double.class.isAssignableFrom(fieldType)) {
+										readValue = Double.parseDouble(readValueAsString);
 									} else if (Boolean.class.isAssignableFrom(fieldType)
 											|| boolean.class.isAssignableFrom(fieldType)) {
 										readValue = Boolean.parseBoolean(readValueAsString);
